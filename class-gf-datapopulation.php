@@ -13,6 +13,7 @@
 		protected $_title = 'Gravity Forms Data Population';
 		protected $_short_title = 'Data Population';
 		private $forms_to_populate = array();
+		private $field_types_to_populate = array();
 
 		private static $_instance = null;
 	
@@ -57,7 +58,7 @@
 					'version'		=>	$this->_version,
 					'enqueue'		=>	array(
 						array(
-							'field_types'		=>	array( 'address', 'email', 'name', 'phone' )
+							'field_types'		=>	$this->field_types_to_populate
 						)
 					)
 				)
@@ -84,7 +85,7 @@
 			$sample_user_data = wp_remote_get( 'http://api.randomuser.me/?results=1' );
 			
 			/* If user data request returns an error, default to default data */
-			 if ( is_a( $sample_user_data, 'WP_Error' ) ) {
+			if ( is_a( $sample_user_data, 'WP_Error' ) ) {
 				$this->_full_dir = pathinfo( $this->_full_path );
 				$sample_user_data = json_decode( file_get_contents( trailingslashit( $this->_full_dir['dirname'] ) . 'inc/user-data.json' ), true );
 			} else {
@@ -163,6 +164,35 @@
 					$form_to_populate['fields']['input_'. $form['id'] .'_'. $field['id']] = str_replace( ')-', ') ', $sample_user_data['phone'] );
 				}
 				
+				/* Apply filters for sample data */
+				if ( empty ( $field['inputs'] ) ) {
+					
+					$field_value = ( array_key_exists( 'input_'. $form['id'] .'_'. $field['id'], $form_to_populate['fields'] ) ) ? $form_to_populate['fields']['input_'. $form['id'] .'_'. $field['id']] : '';
+					
+					$field_value = apply_filters( 'gf_datapopulation_value_' . $form['id'] .'_'. $field['id'], apply_filters( 'gf_datapopulation_value_' . $form['id'], apply_filters( 'gf_datapopulation_value', $field_value, $form, $field ), $form, $field ), $form, $field );
+					
+					$form_to_populate['fields']['input_'. $form['id'] .'_'. $field['id']] = $field_value;		
+								
+				} else {
+					
+					foreach ( $field['inputs'] as $input ) {
+						
+						list( $field_id, $subfield_id ) = explode( '.', $input['id'] );
+			
+						$field_value = ( array_key_exists( 'input_'. $form['id'] .'_'. $field['id'] .'_'. $subfield_id, $form_to_populate['fields'] ) ) ? $form_to_populate['fields']['input_'. $form['id'] .'_'. $field['id'] .'_'. $subfield_id] : '';
+					
+						$field_value = apply_filters( 'gf_datapopulation_value_' . $form['id'] .'_'. $field['id'] .'_'. $subfield_id, apply_filters( 'gf_datapopulation_value_' . $form['id'], apply_filters( 'gf_datapopulation_value', $field_value, $form, $field ), $form, $field ), $form, $field );
+					
+						$form_to_populate['fields']['input_'. $form['id'] .'_'. $field['id'] .'_'. $subfield_id] = $field_value;		
+
+					}
+					
+				}
+				
+				/* Add field type to field types to populate array to ensure script gets enqueued */
+				if ( ! in_array( $field['type'], $this->field_types_to_populate ) )
+					$this->field_types_to_populate[] = $field['type'];
+				
 			}
 		
 			/* Push this form to the population queue */
@@ -222,5 +252,3 @@
 		}
 
 	}
-	
-	
